@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ㄅㄆㄇㄈ Sound Chart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: the classroom 注音拼音對照表 — finals down the side, initials across the top, one vertical syllable per cell; tapping a cell opens its recording slots in a bottom sheet. */
+:root {
+  color-scheme: light;
+  --bg: #EEF2F4;
+  --sheet: #FFFFFF;
+  --stripe: #FFF0E0;
+  --rule: #E2B386;
+  --rule-soft: #F1DCC6;
+  --ink: #22292E;
+  --muted: #66717A;
+  --accent: #D2622A;
+  --sel: #1E6E8A;
+  --sel-soft: #DCEEF4;
+  --font-zy: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif;
+  --font-ui: "Lexend", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111518; --sheet: #191E22; --stripe: #261F18; --rule: #7A5A3B; --rule-soft: #3A3027;
+    --ink: #E7ECEF; --muted: #9AA6AE; --accent: #F2955A; --sel: #66B9D6; --sel-soft: #1C3440; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111518; --sheet: #191E22; --stripe: #261F18; --rule: #7A5A3B; --rule-soft: #3A3027;
+  --ink: #E7ECEF; --muted: #9AA6AE; --accent: #F2955A; --sel: #66B9D6; --sel-soft: #1C3440; color-scheme: dark;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+html, body { background: var(--bg); color: var(--ink); }
+body { margin: 0; font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+[hidden]:not([hidden=until-found i]) { display: none !important; }
+.wrap {
+  max-width: 1120px; margin: 0 auto;
+  padding-block: 28px 220px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px;
+}
+header { display: grid; gap: 8px; }
+h1 { margin: 0; font-size: clamp(1.5rem, 4vw, 2.1rem); font-weight: 600; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; text-wrap: balance; }
+h1 .zy { font-family: var(--font-zy); color: var(--accent); letter-spacing: .06em; }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+.scroller { overflow-x: auto; border: 2px solid var(--rule); border-radius: 12px; background: var(--sheet); width: fit-content; max-width: 100%; }
+table { border-collapse: collapse; font-family: var(--font-zy); table-layout: fixed; width: calc(56px + 21 * 38px); }
+col.c-row { width: 56px; } col.c-ini { width: 38px; }
+th, td { border: 1px solid var(--rule-soft); padding: 0; text-align: center; }
+tbody tr:nth-child(odd) td, tbody tr:nth-child(odd) th { background: var(--stripe); }
+tbody tr:nth-child(even) td, tbody tr:nth-child(even) th { background: var(--sheet); }
+tr.split > * { border-top: 2px solid var(--rule); }
+thead th { background: var(--sheet); position: sticky; top: 0; z-index: 2; border-bottom: 2px solid var(--rule); }
+th.rowh { position: sticky; left: 0; z-index: 1; border-right: 2px solid var(--rule); }
+thead th.corner { left: 0; z-index: 3; border-right: 2px solid var(--rule); }
+.gsep { border-right: 2px solid var(--rule) !important; }
+td, th { vertical-align: middle; }
+.cellbtn {
+  width: 100%; height: 100%; border: 0; background: transparent; color: var(--ink); cursor: pointer;
+  font-family: var(--font-zy); font-size: 15px; padding: 5px 0 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+}
+/* Zhuyin stacked top to bottom, one symbol per line, each glyph kept upright and horizontal (ㄧ stays 一). */
+.cellbtn .v { display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
+.cellbtn .v.rare { border-left: 1.5px solid currentColor; border-right: 1.5px solid currentColor; border-radius: 2px; padding: 1px 3px; }
+.cellbtn.hdr { font-size: 19px; font-weight: 700; padding: 8px 0; }
+th.rowh .cellbtn { padding: 6px 0; }
+.cellbtn:hover { background: var(--sel-soft); }
+.cellbtn[aria-pressed="true"] { background: var(--sel); color: var(--sheet); }
+.cellbtn .rare { color: var(--muted); }
+.cellbtn[aria-pressed="true"] .rare { color: var(--sheet); }
+.ticks { display: flex; gap: 2px; }
+.ticks i { width: 5px; height: 5px; border-radius: 50%; display: block; box-sizing: border-box; position: relative; }
+.ticks i.yes { background: var(--sel); }
+.ticks i.yes.n5 { background: var(--accent); }
+.ticks i.no { border: 1px solid var(--rule); }
+.ticks i.no::after { content: ""; position: absolute; left: -1px; right: -1px; top: 50%; height: 1px; background: var(--rule); transform: rotate(-45deg); }
+.cellbtn[aria-pressed="true"] .ticks i.yes { background: var(--sheet); }
+.cellbtn[aria-pressed="true"] .ticks i.no { border-color: var(--sheet); opacity: .6; }
+.cellbtn[aria-pressed="true"] .ticks i.no::after { background: var(--sheet); }
+.legend { display: inline-flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.nosound { margin: 0; color: var(--muted); font-size: .82rem; font-family: var(--font-zy); }
+th.rowh .ticks { display: none; }
+thead .ticks { display: none; }
+
+/* Bottom sheet */
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--sheet); border-top: 2px solid var(--rule);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / .08);
+  padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: 14px;
+}
+.sheet-in { max-width: 1120px; margin: 0 auto; display: grid; gap: 10px; }
+.sheet-head { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.sheet-title { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+.sheet-title .big { font-family: var(--font-zy); font-size: 2rem; font-weight: 700; color: var(--ink); line-height: 1; }
+.sheet-title .sub { color: var(--muted); font-size: .85rem; }
+.close { border: 1px solid var(--rule-soft); background: transparent; color: var(--muted); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: .85rem; cursor: pointer; }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.slot { border: 1px solid var(--rule-soft); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; background: var(--bg); }
+.slot .zy { font-family: var(--font-zy); font-size: 1.35rem; font-weight: 500; color: var(--accent); }
+.slot .meta { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--muted); align-items: center; }
+.slot .file { font-family: var(--font-zy); font-size: .78rem; color: var(--muted); }
+.slot .empty { font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule-soft); border-radius: 999px; padding: 1px 8px; }
+.slot .check { font-size: .7rem; color: var(--accent); }
+.hint { margin: 0; color: var(--muted); font-size: .85rem; }
+
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+footer { color: var(--muted); font-size: .8rem; max-width: 72ch; display: grid; gap: 6px; }
+footer p { margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1><span class="zy">ㄅㄆㄇㄈ</span> Sound Chart</h1>
+    <p>Tap any cell or heading to hear its sounds.</p>
+  </header>
+
+
+  <div class="scroller"><table id="chart" aria-label="Zhuyin syllable chart"></table></div>
+
+  <footer>
+    <p class="legend"><span><span class="ticks"><i class="yes"></i></span> tone has a sound</span><span><span class="ticks"><i class="no"></i></span> no sound in Mandarin</span><span><span class="ticks"><i class="yes n5"></i></span> neutral tone ˙</span><span>side lines around a cell: rare reading</span></p>
+    <p>Each cell shows one circle per tone. A fifth circle appears on syllables that take the neutral tone, such as ˙ㄇㄜ, ˙ㄉㄜ and ˙ㄗ; those are marked “check” until they are compared with the MOE syllable table.</p>
+    <p>Headings are sound slots too. Initials ㄅ to ㄒ have one slot for the symbol's name. Finals and ㄓㄔㄕㄖㄗㄘㄙ stand alone as syllables, so they get tone slots.</p>
+  </footer>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <div class="sheet-title"><span class="big" id="sTitle"></span><span class="sub" id="sSub"></span></div>
+      <button class="close" id="sClose" type="button">Close</button>
+    </div>
+    <div class="slots" id="sSlots"></div>
+    <p class="nosound" id="sNone" hidden></p>
+    <p class="hint">Recording is not switched on yet. Name each recording with the file name shown on its slot so it can be matched automatically later.</p>
+  </div>
+</div>
+
+<script>
+const INITS = Array.from("ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙ");
+const GROUP_END = new Set([3, 7, 10, 13, 17]); // thick rule after ㄈ ㄌ ㄏ ㄒ ㄖ
+// Per row: 21 flags in initial order. 1 = syllable exists, r = rare reading [ ], 0 = none.
+const T1 = [
+  ["ㄧ",  "1110 1111 000 111 0000 000"],
+  ["ㄨ",  "1111 1111 111 000 1111 111"],
+  ["ㄩ",  "0000 0011 000 111 0000 000"],
+  ["ㄚ",  "1111 1111 111 000 1110 111"],
+  ["ㄛ",  "1111 000r 000 000 0000 000"],
+  ["ㄜ",  "0010 1111 111 000 1111 111"],
+  ["ㄝ",  "0000 0000 000 000 0000 000"],
+  ["ㄞ",  "1110 1111 111 000 1110 111"],
+  ["ㄟ",  "1111 1011 101 000 r010 100"],
+  ["ㄠ",  "1110 1111 111 000 1111 111"],
+  ["ㄡ",  "0111 1111 111 000 1111 111"],
+  ["ㄢ",  "1111 1111 111 000 1111 111"],
+  ["ㄣ",  "1111 0010 111 000 1111 111"],
+  ["ㄤ",  "1111 1111 111 000 1111 111"],
+  ["ㄥ",  "1111 1111 111 000 1111 111"],
+  ["ㄦ",  "0000 0000 000 000 0000 000"],
+];
+const T2 = [
+  ["ㄧㄚ", "0000 0001 000 111 0000 000"],
+  ["ㄧㄛ", "0000 0000 000 000 0000 000"],
+  ["ㄧㄝ", "1110 1111 000 111 0000 000"],
+  ["ㄧㄞ", "0000 0000 000 000 0000 000"],
+  ["ㄧㄠ", "1110 1111 000 111 0000 000"],
+  ["ㄧㄡ", "0010 1011 000 111 0000 000"],
+  ["ㄧㄢ", "1110 1111 000 111 0000 000"],
+  ["ㄧㄣ", "1110 0011 000 111 0000 000"],
+  ["ㄧㄤ", "0000 0011 000 111 0000 000"],
+  ["ㄧㄥ", "1110 1111 000 111 0000 000"],
+  ["ㄨㄚ", "0000 0000 111 000 1110 000"],
+  ["ㄨㄛ", "0000 1111 111 000 1111 111"],
+  ["ㄨㄞ", "0000 0000 111 000 1110 000"],
+  ["ㄨㄟ", "0000 1100 111 000 1111 111"],
+  ["ㄨㄢ", "0000 1111 111 000 1111 111"],
+  ["ㄨㄣ", "0000 1101 111 000 1111 111"],
+  ["ㄨㄤ", "0000 0000 111 000 1110 000"],
+  ["ㄨㄥ", "0000 1111 111 000 1101 111"],
+  ["ㄩㄝ", "0000 0011 000 111 0000 000"],
+  ["ㄩㄢ", "0000 0001 000 111 0000 000"],
+  ["ㄩㄣ", "0000 0000 000 111 0000 000"],
+  ["ㄩㄥ", "0000 0000 000 111 0000 000"],
+];
+
+// Which of tones 1–4 have a sound: 1 = yes, 0 = no. Neutral tone (˙) is listed separately.
+const TONE_MASK = `
+ㄚ1000 ㄛ1000 ㄜ1111 ㄝ1111 ㄞ1111 ㄟ1111 ㄠ1111 ㄡ1011 ㄢ1011 ㄣ1001 ㄤ1101 ㄥ1000 ㄦ0111
+ㄧ1111 ㄧㄚ1111 ㄧㄛ1000 ㄧㄝ1111 ㄧㄞ0100 ㄧㄠ1111 ㄧㄡ1111 ㄧㄢ1111 ㄧㄣ1111 ㄧㄤ1111 ㄧㄥ1111
+ㄨ1111 ㄨㄚ1111 ㄨㄛ1011 ㄨㄞ1011 ㄨㄟ1111 ㄨㄢ1111 ㄨㄣ1111 ㄨㄤ1111 ㄨㄥ1011
+ㄩ1111 ㄩㄝ1001 ㄩㄢ1111 ㄩㄣ1111 ㄩㄥ1011
+ㄅㄚ1111 ㄅㄛ1111 ㄅㄧ1111 ㄅㄨ0011 ㄅㄞ1111 ㄅㄟ1011 ㄅㄠ1111 ㄅㄢ1011 ㄅㄣ1011 ㄅㄤ1011 ㄅㄥ1101 ㄅㄧㄝ1111 ㄅㄧㄠ1010 ㄅㄧㄢ1011 ㄅㄧㄣ1001 ㄅㄧㄥ1011
+ㄆㄚ1101 ㄆㄛ1111 ㄆㄧ1111 ㄆㄨ1111 ㄆㄞ1101 ㄆㄟ1101 ㄆㄠ1111 ㄆㄡ0010 ㄆㄢ1101 ㄆㄣ1100 ㄆㄤ1101 ㄆㄥ1111 ㄆㄧㄝ1010 ㄆㄧㄠ1111 ㄆㄧㄢ1001 ㄆㄧㄣ1111 ㄆㄧㄥ1100
+ㄇㄚ1111 ㄇㄛ1111 ㄇㄜ0000 ㄇㄧ1111 ㄇㄨ0111 ㄇㄞ0111 ㄇㄟ0111 ㄇㄠ1111 ㄇㄡ0110 ㄇㄢ0111 ㄇㄣ0101 ㄇㄤ0110 ㄇㄥ0111 ㄇㄧㄝ1001 ㄇㄧㄠ1111 ㄇㄧㄡ0001 ㄇㄧㄢ0111 ㄇㄧㄣ0110 ㄇㄧㄥ0101
+ㄈㄚ1110 ㄈㄛ0100 ㄈㄨ1111 ㄈㄟ1111 ㄈㄡ0010 ㄈㄢ1111 ㄈㄣ1111 ㄈㄤ1111 ㄈㄥ1101
+ㄉㄚ1111 ㄉㄜ0100 ㄉㄧ1111 ㄉㄨ1111 ㄉㄞ1011 ㄉㄟ0010 ㄉㄠ1011 ㄉㄡ1011 ㄉㄢ1011 ㄉㄤ1011 ㄉㄥ1011 ㄉㄧㄝ1100 ㄉㄧㄠ1001 ㄉㄧㄡ1000 ㄉㄧㄢ1011 ㄉㄧㄥ1011 ㄉㄨㄛ1111 ㄉㄨㄟ1001 ㄉㄨㄢ1011 ㄉㄨㄣ1011 ㄉㄨㄥ1011
+ㄊㄚ1011 ㄊㄜ0001 ㄊㄧ1111 ㄊㄨ1111 ㄊㄞ0101 ㄊㄠ1111 ㄊㄡ1101 ㄊㄢ1111 ㄊㄤ1111 ㄊㄥ0100 ㄊㄧㄝ1010 ㄊㄧㄠ1111 ㄊㄧㄢ1110 ㄊㄧㄥ1110 ㄊㄨㄛ1111 ㄊㄨㄟ1111 ㄊㄨㄢ1100 ㄊㄨㄣ1100 ㄊㄨㄥ1111
+ㄋㄚ0111 ㄋㄜ0001 ㄋㄧ1111 ㄋㄨ0111 ㄋㄩ0010 ㄋㄞ0011 ㄋㄟ0011 ㄋㄠ0111 ㄋㄡ0001 ㄋㄢ0101 ㄋㄣ0001 ㄋㄤ0100 ㄋㄥ0100 ㄋㄧㄝ1001 ㄋㄧㄠ0011 ㄋㄧㄡ1110 ㄋㄧㄢ0111 ㄋㄧㄣ0100 ㄋㄧㄤ0101 ㄋㄧㄥ0111 ㄋㄨㄛ0101 ㄋㄨㄢ0010 ㄋㄨㄥ0101 ㄋㄩㄝ0001
+ㄌㄚ1011 ㄌㄛ0000 ㄌㄜ0001 ㄌㄧ0111 ㄌㄨ1111 ㄌㄩ0111 ㄌㄞ0101 ㄌㄟ0111 ㄌㄠ1110 ㄌㄡ1111 ㄌㄢ0111 ㄌㄤ0111 ㄌㄥ0011 ㄌㄧㄚ0010 ㄌㄧㄝ1011 ㄌㄧㄠ0111 ㄌㄧㄡ1111 ㄌㄧㄢ0111 ㄌㄧㄣ0111 ㄌㄧㄤ0111 ㄌㄧㄥ0111 ㄌㄨㄛ1111 ㄌㄨㄢ0111 ㄌㄨㄣ0101 ㄌㄨㄥ0110 ㄌㄩㄝ0001 ㄌㄩㄢ0110
+ㄍㄚ1000 ㄍㄜ1101 ㄍㄨ1011 ㄍㄞ1011 ㄍㄟ0010 ㄍㄠ1011 ㄍㄡ1011 ㄍㄢ1011 ㄍㄣ1001 ㄍㄤ1011 ㄍㄥ1011 ㄍㄨㄚ1011 ㄍㄨㄛ1111 ㄍㄨㄞ1011 ㄍㄨㄟ1011 ㄍㄨㄢ1011 ㄍㄨㄣ0011 ㄍㄨㄤ1011 ㄍㄨㄥ1011
+ㄎㄚ1010 ㄎㄜ1111 ㄎㄨ1011 ㄎㄞ1011 ㄎㄠ0011 ㄎㄡ1011 ㄎㄢ1011 ㄎㄣ0010 ㄎㄤ1101 ㄎㄥ1000 ㄎㄨㄚ1011 ㄎㄨㄛ0001 ㄎㄨㄞ0001 ㄎㄨㄟ1111 ㄎㄨㄢ1010 ㄎㄨㄣ1011 ㄎㄨㄤ1101 ㄎㄨㄥ1011
+ㄏㄚ1000 ㄏㄜ1101 ㄏㄨ1111 ㄏㄞ1111 ㄏㄟ1000 ㄏㄠ1111 ㄏㄡ0111 ㄏㄢ1111 ㄏㄣ0111 ㄏㄤ0100 ㄏㄥ1101 ㄏㄨㄚ1101 ㄏㄨㄛ0111 ㄏㄨㄞ0101 ㄏㄨㄟ1111 ㄏㄨㄢ1111 ㄏㄨㄣ1101 ㄏㄨㄤ1111 ㄏㄨㄥ1111
+ㄐㄧ1111 ㄐㄩ1111 ㄐㄧㄚ1111 ㄐㄧㄝ1111 ㄐㄧㄠ1111 ㄐㄧㄡ1011 ㄐㄧㄢ1011 ㄐㄧㄣ1011 ㄐㄧㄤ1011 ㄐㄧㄥ1011 ㄐㄩㄥ0010 ㄐㄩㄝ1101 ㄐㄩㄢ1011 ㄐㄩㄣ1001
+ㄑㄧ1111 ㄑㄩ1111 ㄑㄧㄚ1001 ㄑㄧㄝ1111 ㄑㄧㄠ1111 ㄑㄧㄡ1100 ㄑㄧㄢ1111 ㄑㄧㄣ1111 ㄑㄧㄤ1111 ㄑㄧㄥ1111 ㄑㄩㄥ0100 ㄑㄩㄝ1101 ㄑㄩㄢ1111 ㄑㄩㄣ0100
+ㄒㄧ1111 ㄒㄩ1111 ㄒㄧㄚ1101 ㄒㄧㄝ1111 ㄒㄧㄠ1111 ㄒㄧㄡ1011 ㄒㄧㄢ1111 ㄒㄧㄣ1001 ㄒㄧㄤ1111 ㄒㄧㄥ1111 ㄒㄩㄥ1100 ㄒㄩㄝ1111 ㄒㄩㄢ1111 ㄒㄩㄣ1101
+ㄓ1111 ㄓㄚ1111 ㄓㄜ1111 ㄓㄨ1111 ㄓㄞ1111 ㄓㄟ0001 ㄓㄠ1111 ㄓㄡ1111 ㄓㄢ1011 ㄓㄣ1011 ㄓㄤ1011 ㄓㄥ1011 ㄓㄨㄚ1010 ㄓㄨㄛ1100 ㄓㄨㄞ1011 ㄓㄨㄟ1001 ㄓㄨㄢ1011 ㄓㄨㄣ1010 ㄓㄨㄤ1001 ㄓㄨㄥ1011
+ㄔ1111 ㄔㄚ1101 ㄔㄜ1011 ㄔㄨ1111 ㄔㄞ1100 ㄔㄠ1110 ㄔㄡ1111 ㄔㄢ1111 ㄔㄣ0101 ㄔㄤ1111 ㄔㄥ1111 ㄔㄨㄚ1000 ㄔㄨㄛ1001 ㄔㄨㄞ1011 ㄔㄨㄟ1100 ㄔㄨㄢ1111 ㄔㄨㄣ1110 ㄔㄨㄤ1111 ㄔㄨㄥ1111
+ㄕ1111 ㄕㄚ1011 ㄕㄜ1111 ㄕㄨ1111 ㄕㄞ1001 ㄕㄟ0100 ㄕㄠ1111 ㄕㄡ1111 ㄕㄢ1011 ㄕㄣ1111 ㄕㄤ1011 ㄕㄥ1111 ㄕㄨㄚ1010 ㄕㄨㄛ1001 ㄕㄨㄞ1011 ㄕㄨㄟ0011 ㄕㄨㄢ1001 ㄕㄨㄣ0011 ㄕㄨㄤ1010
+ㄖ0001 ㄖㄜ0011 ㄖㄨ0111 ㄖㄠ0111 ㄖㄡ0101 ㄖㄢ0110 ㄖㄣ0111 ㄖㄤ1011 ㄖㄥ1100 ㄖㄨㄛ0001 ㄖㄨㄟ0001 ㄖㄨㄢ0010 ㄖㄨㄣ0001 ㄖㄨㄥ0110
+ㄗ1011 ㄗㄚ1100 ㄗㄜ0101 ㄗㄨ1110 ㄗㄞ1011 ㄗㄟ0100 ㄗㄠ1111 ㄗㄡ0011 ㄗㄢ0111 ㄗㄣ0010 ㄗㄤ1001 ㄗㄥ1001 ㄗㄨㄛ0111 ㄗㄨㄟ0011 ㄗㄨㄢ1011 ㄗㄨㄣ1000 ㄗㄨㄥ1011
+ㄘ1111 ㄘㄚ1000 ㄘㄜ0001 ㄘㄨ1001 ㄘㄞ1111 ㄘㄠ1110 ㄘㄡ0001 ㄘㄢ1111 ㄘㄣ1100 ㄘㄤ1100 ㄘㄥ0101 ㄘㄨㄛ1001 ㄘㄨㄟ1001 ㄘㄨㄢ0001 ㄘㄨㄣ1111 ㄘㄨㄥ1100
+ㄙ1011 ㄙㄚ1011 ㄙㄜ0001 ㄙㄨ1101 ㄙㄞ1001 ㄙㄠ1011 ㄙㄡ1011 ㄙㄢ1010 ㄙㄣ1000 ㄙㄤ1010 ㄙㄥ1000 ㄙㄨㄛ1010 ㄙㄨㄟ1111 ㄙㄨㄢ1001 ㄙㄨㄣ1010 ㄙㄨㄥ1011`;
+const MASK = new Map();
+for (const tok of TONE_MASK.trim().split(/\s+/)) {
+  const m = tok.match(/^(\D+)([01]{4})$/);
+  if (m) MASK.set(m[1], Array.from(m[2]).map(x => x === "1"));
+}
+// Syllables with a neutral-tone (˙) sound. Chosen from common words; still to be checked against the MOE table.
+const NEUTRAL = new Set(["ㄅㄚ","ㄇㄚ","ㄋㄚ","ㄌㄚ","ㄅㄛ","ㄌㄛ","ㄇㄜ","ㄉㄜ","ㄋㄜ","ㄌㄜ","ㄓㄜ","ㄍㄜ","ㄗ","ㄇㄣ","ㄌㄡ","ㄊㄡ","ㄕㄤ","ㄌㄞ","ㄑㄩ","ㄒㄧ","ㄌㄧ","ㄚ","ㄛ","ㄧㄚ","ㄨㄚ","ㄧㄛ"]);
+const NAME_ONLY = new Set(Array.from("ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒ"));
+const NAME_SAY = { "ㄅ":"ㄅㄛ","ㄆ":"ㄆㄛ","ㄇ":"ㄇㄛ","ㄈ":"ㄈㄛ","ㄉ":"ㄉㄜ","ㄊ":"ㄊㄜ","ㄋ":"ㄋㄜ","ㄌ":"ㄌㄜ","ㄍ":"ㄍㄜ","ㄎ":"ㄎㄜ","ㄏ":"ㄏㄜ","ㄐ":"ㄐㄧ","ㄑ":"ㄑㄧ","ㄒ":"ㄒㄧ" };
+const TONES = [
+  { n: 1, mark: "",  name: "1st tone" },
+  { n: 2, mark: "ˊ", name: "2nd tone" },
+  { n: 3, mark: "ˇ", name: "3rd tone" },
+  { n: 4, mark: "ˋ", name: "4th tone" },
+  { n: 5, mark: "˙", name: "Neutral tone" },
+];
+const notate = (syl, n) => n === 5 ? "˙" + syl : syl + TONES[n - 1].mark;
+
+// Every tone position for a syllable, each marked with whether Mandarin has that sound.
+function tonesFor(syl) {
+  if (NAME_ONLY.has(syl)) return [{ syl, tone: 0, file: `${syl}0`, sound: true }];
+  const mask = MASK.get(syl) || [true, true, true, true];
+  const t = [1, 2, 3, 4].map(n => ({ syl, tone: n, file: `${syl}${n}`, sound: mask[n - 1] }));
+  if (NEUTRAL.has(syl)) t.push({ syl, tone: 5, file: `${syl}5`, sound: true, check: true });
+  return t;
+}
+const slotsFor = syl => tonesFor(syl).filter(t => t.sound);
+
+const allSyl = new Map();
+let selectedBtn = null;
+
+function ticksHTML(syl) {
+  return `<span class="ticks" aria-hidden="true">${tonesFor(syl).map(t =>
+    `<i class="${t.sound ? "yes" : "no"}${t.tone === 5 ? " n5" : ""}"></i>`).join("")}</span>`;
+}
+function cellButton(syl, opts = {}) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "cellbtn" + (opts.hdr ? " hdr" : "");
+  b.setAttribute("aria-pressed", "false");
+  const label = `<span class="v${opts.rare ? " rare" : ""}">${Array.from(syl).map(c => `<span>${c}</span>`).join("")}</span>`;
+  b.innerHTML = label + (opts.hdr ? "" : ticksHTML(syl));
+  b.setAttribute("aria-label", `${syl}${opts.rare ? ", rare reading" : ""}, open sound slots`);
+  b.addEventListener("click", () => select(b, syl, opts.rare));
+  allSyl.set(syl, { rare: !!opts.rare });
+  return b;
+}
+function build(tableEl, rows) {
+  const cg = document.createElement("colgroup");
+  cg.innerHTML = `<col class="c-row">` + INITS.map(() => `<col class="c-ini">`).join("");
+  tableEl.appendChild(cg);
+  const thead = document.createElement("thead");
+  const hr = document.createElement("tr");
+  const corner = document.createElement("th"); corner.className = "corner"; hr.appendChild(corner);
+  INITS.forEach((i, k) => {
+    const th = document.createElement("th"); th.scope = "col";
+    if (GROUP_END.has(k)) th.classList.add("gsep");
+    th.appendChild(cellButton(i, { hdr: true }));
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr); tableEl.appendChild(thead);
+  const tb = document.createElement("tbody");
+  rows.forEach(([fin, flags], idx) => {
+    const tr = document.createElement("tr");
+    if (idx === T1.length) tr.className = "split";
+    const th = document.createElement("th"); th.scope = "row"; th.className = "rowh";
+    th.appendChild(cellButton(fin, { hdr: true }));
+    tr.appendChild(th);
+    Array.from(flags.replace(/\s/g, "")).forEach((f, k) => {
+      const td = document.createElement("td");
+      if (GROUP_END.has(k)) td.classList.add("gsep");
+      if (f !== "0") td.appendChild(cellButton(INITS[k] + fin, { rare: f === "r" }));
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  tableEl.appendChild(tb);
+}
+build(document.getElementById("chart"), T1.concat(T2));
+
+// Bottom sheet
+const sheet = document.getElementById("sheet");
+function select(btn, syl, rare) {
+  if (selectedBtn) selectedBtn.setAttribute("aria-pressed", "false");
+  selectedBtn = btn; btn.setAttribute("aria-pressed", "true");
+  document.getElementById("sTitle").textContent = rare ? `［${syl}］` : syl;
+  const all = tonesFor(syl);
+  const slots = all.filter(t => t.sound);
+  const none = all.filter(t => !t.sound);
+  document.getElementById("sSub").textContent = NAME_ONLY.has(syl)
+    ? `Symbol name, read as ${NAME_SAY[syl]}`
+    : `${slots.length} ${slots.length === 1 ? "sound" : "sounds"}${rare ? " · rare reading" : ""}`;
+  const wrap = document.getElementById("sSlots"); wrap.innerHTML = "";
+  for (const s of slots) {
+    const d = document.createElement("div"); d.className = "slot";
+    const zy = s.tone === 0 ? syl : notate(syl, s.tone);
+    const name = s.tone === 0 ? "Symbol name" : TONES[s.tone - 1].name;
+    d.innerHTML = `<span class="zy">${zy}</span>
+      <span class="meta">${name}<span class="empty">Empty</span></span>
+      <span class="file">File: ${s.file}</span>
+      ${s.check ? `<span class="check">Check against MOE table</span>` : ""}`;
+    wrap.appendChild(d);
+  }
+  const ns = document.getElementById("sNone");
+  ns.hidden = !none.length;
+  ns.textContent = none.length ? `No sound: ${none.map(t => notate(syl, t.tone)).join("　")}` : "";
+  sheet.hidden = false;
+}
+document.getElementById("sClose").addEventListener("click", () => {
+  sheet.hidden = true;
+  if (selectedBtn) { selectedBtn.setAttribute("aria-pressed", "false"); selectedBtn.focus(); selectedBtn = null; }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) document.getElementById("sClose").click(); });
+</script>
+
+</body>
+</html>
