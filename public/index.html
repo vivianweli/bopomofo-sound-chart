@@ -135,6 +135,7 @@ thead .ticks { display: none; }
 .rec-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .rec-btns .act { font-size: .9rem; padding: 8px 14px; }
 .rec-status { margin: 0; min-height: 1.4em; font-size: .85rem; color: var(--ink); }
+.pw { border: 1px solid var(--rule); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 8px 12px; font: inherit; min-width: 220px; }
 kbd { font: inherit; font-size: .7rem; opacity: .75; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
 
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -150,6 +151,15 @@ footer p { margin: 0; }
     <p>Tap any cell or heading to hear its sounds.</p>
   </header>
 
+  <section class="rec" id="lock" hidden aria-label="Record mode login">
+    <div class="rec-top"><strong>Record mode</strong><span>Enter the recording password</span></div>
+    <form class="rec-btns" id="lockForm">
+      <input type="password" id="lockPw" autocomplete="current-password" aria-label="Recording password" class="pw">
+      <button type="submit" class="act primary">Unlock</button>
+    </form>
+    <p class="rec-status" id="lockMsg" role="status"></p>
+  </section>
+
   <section class="rec" id="rec" hidden aria-label="Record mode">
     <div class="rec-top"><strong>Record mode</strong><span id="rCount"></span></div>
     <div class="rec-main"><div class="rec-say" id="rSay"></div><div class="rec-meta" id="rMeta"></div></div>
@@ -158,10 +168,10 @@ footer p { margin: 0; }
       <button type="button" class="act primary" id="rBtn">● Record</button>
       <button type="button" class="act" id="rPlay">▶ Play take</button>
       <button type="button" class="act" id="rSkip">Skip ▶</button>
-      <button type="button" class="act" id="rExport">⬇ Export sounds.zip</button>
+      <button type="button" class="act" id="rLock">Lock</button>
     </div>
     <p class="rec-status" id="rStatus" role="status"></p>
-    <p class="hint">Space starts and stops a take, then it jumps to the next empty slot. Recordings are stored in this browser only, so export the zip often and keep using the same browser.</p>
+    <p class="hint">Space starts and stops a take. Each take is uploaded as soon as you stop and goes live for everyone, then it jumps to the next empty slot.</p>
   </section>
 
   <div class="scroller"><table id="chart" aria-label="Zhuyin syllable chart"></table></div>
@@ -388,27 +398,28 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hid
 </script>
 
 <script>
-/* Audio: playback of sounds/<file>.mp3 for everyone; recording, local storage and zip export in record mode (?record). */
-const REC_MODE = new URLSearchParams(location.search).has("record");
-const remote = new Map();   // file name (no extension) -> extension, from sounds/manifest.json
-const local = new Map();    // file name -> { blob, ext }, recorded in this browser
+/* Audio: everyone can play sounds from /api/sounds. Record mode (?record) needs the recording password; takes upload straight to the server. */
+const WANT_REC = new URLSearchParams(location.search).has("record");
+let REC_MODE = false;       // true once the password has been accepted
+let PASSWORD = "";
+const remote = new Map();   // file name (no extension) -> extension, from /api/sounds
+const local = new Map();    // takes made in this visit, kept so they play back instantly
 const hasClip = f => local.has(f) || remote.has(f);
-const remoteURL = f => `sounds/${encodeURIComponent(f)}.${remote.get(f)}`;
-
-const R = { stream: null, mr: null, chunks: [], file: null, busy: false };   // recorder state (record mode)
+const soundURL = f => `/api/sounds/${encodeURIComponent(`${f}.${remote.get(f)}`)}`;
+const R = { stream: null, mr: null, chunks: [], file: null, busy: false };   // recorder state
 const isRecording = () => !!R.mr && R.mr.state === "recording";
 
 const player = new Audio();
 let playerURL = null;
 function playClip(file) {
   if (playerURL) { URL.revokeObjectURL(playerURL); playerURL = null; }
-  if (local.has(file)) { playerURL = URL.createObjectURL(local.get(file).blob); player.src = playerURL; }
-  else if (remote.has(file)) player.src = remoteURL(file);
+  if (local.has(file)) { playerURL = URL.createObjectURL(local.get(file)); player.src = playerURL; }
+  else if (remote.has(file)) player.src = soundURL(file);
   else return;
   player.play().catch(() => {});
 }
 
-// Tint cells by how many of their slots have a recording.
+// Underline cells by how many of their slots have a recording.
 function refreshMarks() {
   for (const [syl, { btn }] of allSyl) {
     const slots = slotsFor(syl), n = slots.filter(s => hasClip(s.file)).length;
@@ -425,139 +436,137 @@ document.getElementById("sSlots").addEventListener("click", e => {
   else if (b.dataset.act === "rec") toggleRec(b.dataset.file);
 });
 
-fetch("sounds/manifest.json").then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
+fetch("/api/sounds").then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
   for (const name of list) { const i = name.lastIndexOf("."); remote.set(name.slice(0, i), name.slice(i + 1)); }
   refreshAll();
 });
 
-if (REC_MODE) {
-  document.getElementById("rec").hidden = false;
-  const $ = id => document.getElementById(id);
-  const status = msg => { $("rStatus").textContent = msg; };
+/* ---------- Record mode ---------- */
+const $ = id => document.getElementById(id);
+const status = msg => { $("rStatus").textContent = msg; };
+const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "x-record-password": PASSWORD, ...(opts.headers || {}) } });
 
-  // Load the mp3 encoder and zip library only when recording.
-  const loadScript = src => new Promise((res, rej) => {
-    const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("Could not load " + src));
-    document.head.appendChild(s);
-  });
-  const libs = Promise.all([
-    loadScript("https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"),
-    loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"),
-  ]);
-  libs.catch(e => status(e.message + " (mp3 encoding and zip export need internet)"));
+// Trim silence, normalise, encode to mono mp3.
+let lameReady = null;
+const loadLame = () => lameReady || (lameReady = new Promise((res, rej) => {
+  const s = document.createElement("script");
+  s.src = "https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js";
+  s.onload = res; s.onerror = () => { lameReady = null; rej(new Error("Could not load the mp3 encoder")); };
+  document.head.appendChild(s);
+}));
+async function toMp3(blob) {
+  await loadLame();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await ctx.decodeAudioData(await blob.arrayBuffer()); ctx.close();
+  const data = buf.getChannelData(0), thr = 0.015, pad = Math.round(buf.sampleRate * 0.12);
+  let a = 0, b = data.length - 1;
+  while (a < b && Math.abs(data[a]) < thr) a++;
+  while (b > a && Math.abs(data[b]) < thr) b--;
+  const seg = data.subarray(Math.max(0, a - pad), Math.min(data.length, b + pad + 1));
+  let peak = 0; for (const v of seg) if (Math.abs(v) > peak) peak = Math.abs(v);
+  if (peak < 0.02) return null;
+  const g = Math.min(0.9 / peak, 8), pcm = new Int16Array(seg.length);
+  for (let i = 0; i < seg.length; i++) pcm[i] = Math.max(-1, Math.min(1, seg[i] * g)) * 0x7fff;
+  const enc = new lamejs.Mp3Encoder(1, buf.sampleRate, 96), parts = [];
+  for (let i = 0; i < pcm.length; i += 1152) { const c = enc.encodeBuffer(pcm.subarray(i, i + 1152)); if (c.length) parts.push(c); }
+  const tail = enc.flush(); if (tail.length) parts.push(tail);
+  return new Blob(parts, { type: "audio/mpeg" });
+}
 
-  // IndexedDB keeps takes between visits.
-  const dbp = new Promise((res, rej) => {
-    const r = indexedDB.open("bopomofo-rec", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("clips");
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  });
-  const dbPut = async (key, val) => { const d = await dbp; return new Promise((res, rej) => {
-    const t = d.transaction("clips", "readwrite"); t.objectStore("clips").put(val, key); t.oncomplete = res; t.onerror = () => rej(t.error); }); };
-  const dbAll = async () => { const d = await dbp; return new Promise((res, rej) => {
-    const out = [], c = d.transaction("clips").objectStore("clips").openCursor();
-    c.onsuccess = () => { const cur = c.result; if (cur) { out.push([cur.key, cur.value]); cur.continue(); } else res(out); };
-    c.onerror = () => rej(c.error); }); };
-  dbAll().then(rows => { for (const [k, v] of rows) local.set(k, v); refreshAll(); })
-         .catch(() => status("Browser storage is unavailable, so takes cannot be kept between visits."));
-  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-
-  // Trim silence, normalise, encode to mono mp3.
-  async function toMp3(blob) {
-    await libs;
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const buf = await ctx.decodeAudioData(await blob.arrayBuffer()); ctx.close();
-    const data = buf.getChannelData(0), thr = 0.015, pad = Math.round(buf.sampleRate * 0.12);
-    let a = 0, b = data.length - 1;
-    while (a < b && Math.abs(data[a]) < thr) a++;
-    while (b > a && Math.abs(data[b]) < thr) b--;
-    const seg = data.subarray(Math.max(0, a - pad), Math.min(data.length, b + pad + 1));
-    let peak = 0; for (const v of seg) if (Math.abs(v) > peak) peak = Math.abs(v);
-    if (peak < 0.02) return null;
-    const g = Math.min(0.9 / peak, 8), pcm = new Int16Array(seg.length);
-    for (let i = 0; i < seg.length; i++) pcm[i] = Math.max(-1, Math.min(1, seg[i] * g)) * 0x7fff;
-    const enc = new lamejs.Mp3Encoder(1, buf.sampleRate, 96), parts = [];
-    for (let i = 0; i < pcm.length; i += 1152) { const c = enc.encodeBuffer(pcm.subarray(i, i + 1152)); if (c.length) parts.push(c); }
-    const tail = enc.flush(); if (tail.length) parts.push(tail);
-    return new Blob(parts, { type: "audio/mpeg" });
-  }
-
-  // Recorder
-  async function toggleRec(file) {
-    if (isRecording()) { R.mr.stop(); return; }
-    if (R.busy) return;
-    try { R.stream = R.stream || await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch { status("Microphone blocked. Allow mic access for this site, then try again."); return; }
-    const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
-    R.chunks = []; R.file = file;
-    R.mr = new MediaRecorder(R.stream, mime ? { mimeType: mime } : undefined);
-    R.mr.ondataavailable = e => { if (e.data.size) R.chunks.push(e.data); };
-    R.mr.onstop = () => finishTake(file, new Blob(R.chunks, { type: R.mr.mimeType }));
-    R.mr.start();
-    status("Recording… say it, then stop.");
-    refreshAll();
-  }
-  window.toggleRec = toggleRec;
-  async function finishTake(file, raw) {
-    R.busy = true; refreshAll(); status("Saving…");
+async function toggleRec(file) {
+  if (!REC_MODE) return;
+  if (isRecording()) { R.mr.stop(); return; }
+  if (R.busy) return;
+  try { R.stream = R.stream || await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { status("Microphone blocked. Allow mic access for this site, then try again."); return; }
+  const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  R.chunks = []; R.file = file;
+  R.mr = new MediaRecorder(R.stream, mime ? { mimeType: mime } : undefined);
+  R.mr.ondataavailable = e => { if (e.data.size) R.chunks.push(e.data); };
+  R.mr.onstop = () => finishTake(file, new Blob(R.chunks, { type: R.mr.mimeType }));
+  R.mr.start();
+  status("Recording… say it, then stop.");
+  refreshAll();
+}
+async function finishTake(file, raw) {
+  R.busy = true; refreshAll(); status("Saving…");
+  try {
+    let clip = raw, ext = raw.type.includes("mp4") ? "m4a" : "webm";
     try {
-      let clip;
-      try {
-        const mp3 = await toMp3(raw);
-        if (!mp3) { status("Too quiet. Move closer to the mic and try again."); return; }
-        clip = { blob: mp3, ext: "mp3" };
-      } catch { clip = { blob: raw, ext: raw.type.includes("mp4") ? "m4a" : "webm" }; }
-      local.set(file, clip);
-      await dbPut(file, clip).catch(() => status("Saved for now, but browser storage failed. Export soon."));
-      if (!$("rStatus").textContent.startsWith("Saved for now")) status(`Saved ${file} ✓`);
-      if (G.list[G.i] && G.list[G.i].file === file) { const j = nextMissing(G.i + 1); if (j >= 0) G.i = j; }
-    } finally { R.busy = false; refreshAll(); }
-  }
+      const mp3 = await toMp3(raw);
+      if (!mp3) { status("Too quiet. Move closer to the mic and try again."); return; }
+      clip = mp3; ext = "mp3";
+    } catch { /* encoder unavailable: upload the browser's own format */ }
+    const res = await api(`/api/sounds/${encodeURIComponent(`${file}.${ext}`)}`, { method: "PUT", body: clip });
+    if (res.status === 401) { lockUp("Password no longer accepted."); return; }
+    if (!res.ok) { status(`Upload failed (${res.status}). Record it again.`); return; }
+    // Replace any older take stored under a different extension.
+    const old = remote.get(file);
+    if (old && old !== ext) api(`/api/sounds/${encodeURIComponent(`${file}.${old}`)}`, { method: "DELETE" }).catch(() => {});
+    remote.set(file, ext); local.set(file, clip);
+    status(`Saved ${file} ✓ (live now)`);
+    if (G.list[G.i] && G.list[G.i].file === file) { const j = nextMissing(G.i + 1); if (j >= 0) G.i = j; }
+  } catch { status("Upload failed. Check your connection and record it again."); }
+  finally { R.busy = false; refreshAll(); }
+}
 
-  // Guided queue: every slot in chart order.
-  const G = { list: [], i: 0 };
-  for (const syl of allSyl.keys()) for (const s of slotsFor(syl)) G.list.push(s);
-  function nextMissing(from) {
-    for (let k = 0; k < G.list.length; k++) { const j = (from + k) % G.list.length; if (!hasClip(G.list[j].file)) return j; }
-    return -1;
-  }
-  window.focusGuide = syl => { const j = G.list.findIndex(s => s.syl === syl); if (j >= 0) { G.i = j; renderGuide(); } };
-  window.renderGuide = function () {
-    const s = G.list[G.i], done = G.list.filter(x => hasClip(x.file)).length, live = isRecording();
-    $("rCount").textContent = `${done} / ${G.list.length} recorded`;
-    $("rSay").textContent = s.tone === 0 ? s.syl : notate(s.syl, s.tone);
-    $("rMeta").textContent = `${s.tone === 0 ? "Symbol name" : TONES[s.tone - 1].name} · ${s.file} · ${hasClip(s.file) ? "recorded" : "empty"}`;
-    $("rBtn").textContent = live ? "■ Stop" : "● Record"; $("rBtn").classList.toggle("live", live);
-    $("rBtn").disabled = R.busy; $("rPlay").disabled = !hasClip(s.file);
-  };
-  $("rBtn").addEventListener("click", () => toggleRec(G.list[G.i].file));
-  $("rPlay").addEventListener("click", () => playClip(G.list[G.i].file));
-  $("rBack").addEventListener("click", () => { G.i = (G.i - 1 + G.list.length) % G.list.length; renderGuide(); });
-  $("rSkip").addEventListener("click", () => { const j = nextMissing(G.i + 1); G.i = j >= 0 ? j : (G.i + 1) % G.list.length; renderGuide(); });
-  const spaceOK = e => e.code === "Space" && !e.repeat && !R.busy && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-  document.addEventListener("keydown", e => { if (e.code === "Space" && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { e.preventDefault(); if (spaceOK(e)) toggleRec(G.list[G.i].file); } });
-  document.addEventListener("keyup", e => { if (e.code === "Space") e.preventDefault(); });
-  addEventListener("pagehide", () => { if (R.stream) R.stream.getTracks().forEach(t => t.stop()); });
+// Guided queue: every slot in chart order.
+const G = { list: [], i: 0 };
+for (const syl of allSyl.keys()) for (const s of slotsFor(syl)) G.list.push(s);
+function nextMissing(from) {
+  for (let k = 0; k < G.list.length; k++) { const j = (from + k) % G.list.length; if (!hasClip(G.list[j].file)) return j; }
+  return -1;
+}
+function focusGuide(syl) { const j = G.list.findIndex(s => s.syl === syl); if (j >= 0) { G.i = j; renderGuide(); } }
+function renderGuide() {
+  const s = G.list[G.i], done = G.list.filter(x => hasClip(x.file)).length, live = isRecording();
+  $("rCount").textContent = `${done} / ${G.list.length} recorded`;
+  $("rSay").textContent = s.tone === 0 ? s.syl : notate(s.syl, s.tone);
+  $("rMeta").textContent = `${s.tone === 0 ? "Symbol name" : TONES[s.tone - 1].name} · ${s.file} · ${hasClip(s.file) ? "recorded" : "empty"}`;
+  $("rBtn").textContent = live ? "■ Stop" : "● Record"; $("rBtn").classList.toggle("live", live);
+  $("rBtn").disabled = R.busy; $("rPlay").disabled = !hasClip(s.file);
+}
+$("rBtn").addEventListener("click", () => toggleRec(G.list[G.i].file));
+$("rPlay").addEventListener("click", () => playClip(G.list[G.i].file));
+$("rBack").addEventListener("click", () => { G.i = (G.i - 1 + G.list.length) % G.list.length; renderGuide(); });
+$("rSkip").addEventListener("click", () => { const j = nextMissing(G.i + 1); G.i = j >= 0 ? j : (G.i + 1) % G.list.length; renderGuide(); });
+$("rLock").addEventListener("click", () => lockUp(""));
+const typing = e => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+document.addEventListener("keydown", e => {
+  if (!REC_MODE || e.code !== "Space" || typing(e)) return;
+  e.preventDefault();
+  if (!e.repeat && !R.busy) toggleRec(G.list[G.i].file);
+});
+document.addEventListener("keyup", e => { if (REC_MODE && e.code === "Space" && !typing(e)) e.preventDefault(); });
+addEventListener("pagehide", () => { if (R.stream) R.stream.getTracks().forEach(t => t.stop()); });
 
-  // Export a complete sounds/ folder: new takes plus everything already on the site, with a fresh manifest.
-  $("rExport").addEventListener("click", async () => {
-    try {
-      await libs; status("Preparing zip…");
-      const zip = new JSZip(), dir = zip.folder("sounds"), names = [];
-      for (const [f, { blob, ext }] of local) { dir.file(`${f}.${ext}`, blob); names.push(`${f}.${ext}`); }
-      for (const [f, ext] of remote) {
-        if (local.has(f)) continue;
-        const r = await fetch(remoteURL(f)); if (!r.ok) continue;
-        dir.file(`${f}.${ext}`, await r.blob()); names.push(`${f}.${ext}`);
-      }
-      dir.file("manifest.json", JSON.stringify(names.sort()));
-      const url = URL.createObjectURL(await zip.generateAsync({ type: "blob" }));
-      const a = Object.assign(document.createElement("a"), { href: url, download: "sounds.zip" });
-      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
-      status(`Exported ${names.length} files. Unzip, then put the sounds folder next to index.html and redeploy.`);
-    } catch (e) { status("Export failed: " + e.message); }
-  });
-  renderGuide();
+// Password gate
+function unlock() {
+  REC_MODE = true;
+  $("lock").hidden = true; $("rec").hidden = false;
+  loadLame().catch(e => status(e.message + ". Takes will upload in the browser's own format."));
+  refreshAll();
+}
+function lockUp(msg) {
+  REC_MODE = false; PASSWORD = "";
+  if (R.stream) { R.stream.getTracks().forEach(t => t.stop()); R.stream = null; }
+  try { sessionStorage.removeItem("rec-pw"); } catch {}
+  $("rec").hidden = true; $("lock").hidden = !WANT_REC; $("lockMsg").textContent = msg;
+  refreshAll();
+}
+async function tryPassword(pw) {
+  PASSWORD = pw;
+  const res = await api("/api/auth", { method: "POST" }).catch(() => null);
+  if (res && res.ok) { try { sessionStorage.setItem("rec-pw", pw); } catch {} unlock(); return true; }
+  PASSWORD = "";
+  $("lockMsg").textContent = !res ? "Could not reach the server." : res.status === 503 ? "The server has no password set yet." : "Wrong password.";
+  return false;
+}
+$("lockForm").addEventListener("submit", e => { e.preventDefault(); $("lockMsg").textContent = "Checking…"; tryPassword($("lockPw").value); });
+if (WANT_REC) {
+  $("lock").hidden = false;
+  let saved = ""; try { saved = sessionStorage.getItem("rec-pw") || ""; } catch {}
+  if (saved) tryPassword(saved);
 }
 refreshMarks();
 </script>
