@@ -10,10 +10,13 @@ const json = (data, status = 200, headers = {}) =>
 
 const digest = s => createHash("sha256").update(s).digest();
 
+// Netlify exposes variables through process.env and, in newer runtimes, Netlify.env.
+const readSecret = () => String(process.env.RECORD_PASSWORD ?? globalThis.Netlify?.env?.get("RECORD_PASSWORD") ?? "").trim();
+
 async function authorised(req) {
-  const secret = process.env.RECORD_PASSWORD;
+  const secret = readSecret();
   if (!secret) return { ok: false, res: json({ error: "RECORD_PASSWORD is not set on the server" }, 503) };
-  const given = req.headers.get("x-record-password") || "";
+  const given = (req.headers.get("x-record-password") || "").trim();
   if (timingSafeEqual(digest(given), digest(secret))) return { ok: true };
   await new Promise(r => setTimeout(r, 600)); // slow down guessing
   return { ok: false, res: json({ error: "Wrong password" }, 401) };
@@ -24,6 +27,8 @@ export async function handle(req, store) {
   const { pathname } = new URL(req.url);
 
   if (pathname === "/api/auth") {
+    // Visiting /api/auth in a browser tells you whether the server can see the password (never the password itself).
+    if (req.method === "GET") return json({ functionRunning: true, passwordConfigured: !!readSecret() });
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
     const a = await authorised(req);
     return a.ok ? json({ ok: true }) : a.res;

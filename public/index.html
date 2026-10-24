@@ -559,7 +559,11 @@ async function tryPassword(pw) {
   const res = await api("/api/auth", { method: "POST" }).catch(() => null);
   if (res && res.ok) { try { sessionStorage.setItem("rec-pw", pw); } catch {} unlock(); return true; }
   PASSWORD = "";
-  $("lockMsg").textContent = !res ? "Could not reach the server." : res.status === 503 ? "The server has no password set yet." : "Wrong password.";
+  let detail = "";
+  if (res && res.status !== 401) { try { detail = (await res.json()).error || ""; } catch {} }
+  $("lockMsg").textContent = !res ? "Could not reach the server."
+    : res.status === 401 ? "Wrong password."
+    : `The server answered ${res.status}${detail ? `: ${detail}` : ""}. Open /api/auth to check the server setup.`;
   return false;
 }
 $("lockForm").addEventListener("submit", e => { e.preventDefault(); $("lockMsg").textContent = "Checking…"; tryPassword($("lockPw").value); });
